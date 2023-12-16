@@ -15,20 +15,21 @@ struct Map {
 Map getMap(std::ifstream &);
 
 long calculateSteps(Map, const Node &, const Node &);
-long calculateSteps(Map, std::vector<Node>, std::vector<Node>);
+long long int calculateStepsBruteForce(Map, std::vector<Node>, std::vector<Node>);
+long long int calculateStepsSmart(Map, std::vector<Node>, std::vector<Node>);
 std::vector<Node> findNodesOnEnding(Map, char);
 
 void partOne(Map);
 void partTwo(Map);
 int main() {
-    std::ifstream input("../input.txt");
+    std::ifstream input("./input.txt");
     if(!input.is_open()) return -1;
     
     Map map = getMap(input);
-    
+
     partOne(map);
     partTwo(map);
-    
+
     input.close();
     return 0;
 }
@@ -38,7 +39,7 @@ void partOne(Map map) {
 }
 
 void partTwo(Map map) {
-    std::cout << "Answer part 2: " << calculateSteps(map, findNodesOnEnding(map, 'A'), findNodesOnEnding(map, 'Z')) << std::endl;
+    std::cout << "Answer part 2: " << calculateStepsSmart(map, findNodesOnEnding(map, 'A'), findNodesOnEnding(map, 'Z')) << std::endl;
 }
 
 Map getMap(std::ifstream &input) {
@@ -67,8 +68,8 @@ long calculateSteps(Map map, const Node &startNode, const Node &endNode) {
         for (int i = 0; i < map.instructions.size(); i++) {
             auto result = std::find_if(map.fromToNodes.begin(), map.fromToNodes.end(), [currentNode](const FromToNode &fromToNode) {return fromToNode.currentNode.node == currentNode.node; });
             switch (map.instructions[i]) {
-                case 'L': currentNode = get<0>(result->toNodes); break;
-                case 'R': currentNode = get<1>(result->toNodes); break;
+                case 'L': currentNode = std::get<0>(result->toNodes); break;
+                case 'R': currentNode = std::get<1>(result->toNodes); break;
             }
             steps++;
         }
@@ -85,7 +86,7 @@ bool allStepsOnEndNode(const std::vector<Node> &startNodes, const std::vector<No
     return amountEndReached == startNodes.size();
 }
 
-long calculateSteps(Map map, std::vector<Node> startNodes, std::vector<Node> endNodes) {
+long long int calculateStepsBruteForce(Map map, std::vector<Node> startNodes, std::vector<Node> endNodes) {
     long steps = 0;
     
     while(!allStepsOnEndNode(startNodes, endNodes)) {
@@ -93,14 +94,50 @@ long calculateSteps(Map map, std::vector<Node> startNodes, std::vector<Node> end
             for (Node &currentNode: startNodes) {
                 auto result = std::find_if(map.fromToNodes.begin(), map.fromToNodes.end(), [currentNode](const FromToNode &fromToNode) {return fromToNode.currentNode.node == currentNode.node; });
                 switch (instruction) {
-                    case 'L': currentNode = get<0>(result->toNodes); break;
-                    case 'R': currentNode = get<1>(result->toNodes); break;
+                    case 'L': currentNode = std::get<0>(result->toNodes); break;
+                    case 'R': currentNode = std::get<1>(result->toNodes); break;
                 }
             }
             steps++;
         }
     }
     return steps;
+}
+
+long long lcmOfVector(std::vector<long long> vec) {
+    long long ans = vec[0];
+
+    for (int i = 1; i < vec.size(); i++)
+        ans = (((vec[i] * ans)) /
+               (std::__gcd(vec[i], ans)));
+
+    return ans;
+}
+
+long long int calculateStepsSmart(Map map, std::vector<Node> startNodes, std::vector<Node> endNodes) {
+    std::map<std::string, long> stepsForEachEndNode;
+
+    std::vector<Node> currentNodes = startNodes;
+    for (int i = 0; i < currentNodes.size(); i++) {
+        Node currentNode = currentNodes[i];
+        while(!allStepsOnEndNode(std::vector<Node>{currentNode}, endNodes)) {
+            for (char instruction : map.instructions) {
+                auto result = std::find_if(map.fromToNodes.begin(), map.fromToNodes.end(), [currentNode](const FromToNode &fromToNode) {return fromToNode.currentNode.node == currentNode.node; });
+                switch (instruction) {
+                    case 'L': currentNode = std::get<0>(result->toNodes); break;
+                    case 'R': currentNode = std::get<1>(result->toNodes); break;
+                }
+                stepsForEachEndNode[startNodes[i].node]++;
+            }
+        }
+    }
+
+    std::vector<long long int> values;
+    for (const auto &kvp : stepsForEachEndNode)
+        values.push_back(kvp.second);
+
+
+    return lcmOfVector(values);
 }
 
 std::vector<Node> findNodesOnEnding(Map map, char c) {
