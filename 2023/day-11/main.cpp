@@ -1,24 +1,28 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
+#include <map>
 
 const char galaxy = '#';
 struct Point { 
-    int x, y, value; 
-    std::string str() {return "Point[x: " + std::to_string(x) + ", y: " + std::to_string(y) + ", value: " + std::to_string(value) + "]";}; 
-    bool operator ==(Point p) const{return x == p.x && y == p.y;};
+    long x, y, value; 
+    std::string str() const {return "Point[x: " + std::to_string(x) + ", y: " + std::to_string(y) + ", value: " + std::to_string(value) + "]";}; 
+    bool operator ==(Point p) const {return x == p.x && y == p.y;};
 };
 struct GalaxyPair {
     Point first, second;
-    long getSteps();
-    std::string str(){return "GalaxyPair[first: " + first.str() + ", second: " + second.str() + ", steps: " + std::to_string(getSteps()) + "]";}
+    long getSteps() const;
+    std::string str() const {return "GalaxyPair[first: " + first.str() + ", second: " + second.str() + ", steps: " + std::to_string(getSteps()) + "]";}
 };
+
 struct Image {
     std::vector<std::vector<char>> space;
-    std::vector<std::vector<char>> identifySpace();
+    std::map<int, long> expandedRows;
+    std::map<int, long> expandedCols;
+    std::vector<std::vector<char>> identifySpace() const;
     std::vector<Point> getGalaxies();
     std::vector<GalaxyPair> getGalaxyPairs();
-    void expandSpace();
+    void expandSpace(long);
 };
 
 Image getImage(std::ifstream &);
@@ -39,14 +43,17 @@ int main() {
 }
 
 void partOne(Image image) {
-    image.expandSpace();
+    image.expandSpace(2);
     long sum = 0;
     for (GalaxyPair galaxyPair : image.getGalaxyPairs()) sum += galaxyPair.getSteps();
     std::cout << "Answer for part 1: " << sum << std::endl;
 }
 
 void partTwo(Image image) {
-    std::cout << "Answer for part 2: " << 1 << std::endl;
+    image.expandSpace(1000000);
+    long sum = 0;
+    for (GalaxyPair galaxyPair : image.getGalaxyPairs()) sum += galaxyPair.getSteps();
+    std::cout << "Answer for part 2: " << sum << std::endl;
 }
 
 Image getImage(std::ifstream &input) {
@@ -57,27 +64,24 @@ Image getImage(std::ifstream &input) {
     return image;
 }
 
-void Image::expandSpace() {
+void Image::expandSpace(long expandSize) {
     // Check for rows and insert new
     for (size_t y = space.size()-1; y > 0; y--) {
         for (size_t x = 0; x < space[y].size(); x++) {
             if (space[y][x] == galaxy) break;
-            if(x == space[y].size()-1) space.insert(space.begin() + y, std::vector<char>(space[y].size(), '.'));
+            if(x == space[y].size()-1) expandedRows[y] = expandSize;
         }
     }
     // Check for cols and insert new
     for (size_t x = space.front().size()-1; x > 0; x--) {
         for (size_t y = 0; y < space.size(); y++) {
             if (space[y][x] == galaxy) break;
-            if(y == space.size()-1) {
-                for (auto &v : space)
-                    v.insert(v.begin() + x, '.');
-            }
+            if(y == space.size()-1) expandedCols[x] = expandSize;
         }
     }
 }
 
-std::vector<std::vector<char>> Image::identifySpace() {
+std::vector<std::vector<char>> Image::identifySpace() const {
     std::vector<std::vector<char>> copySpace = space;
     int n = 1;
     for(std::vector<char> &v : copySpace) {
@@ -94,11 +98,14 @@ std::vector<std::vector<char>> Image::identifySpace() {
 std::vector<Point> Image::getGalaxies() {
     std::vector<Point> points;
     std::vector<std::vector<char>> identitySpace = identifySpace();
-
-    for (int y = 0; y < identitySpace.size(); y++) {
-        for (int x = 0; x < identitySpace[y].size(); x++) {
-            if(space[y][x] == galaxy) points.push_back(Point{x, y, identitySpace[y][x]-'0'});
+    
+    long x = 0, y = 0;
+    for (int i = 0; i < identitySpace.size(); i++) {
+        for (int j = 0; j < identitySpace[i].size(); j++) {
+            if(space[i][j] == galaxy) points.push_back(Point{x, y, identitySpace[i][j]-'0'});
+            x = expandedCols[j] ? x + expandedCols[j] : x + 1;
         }
+        x = 0, y = expandedRows[i] ? y + expandedRows[i] : y + 1;
     }
     return points;
 }
@@ -112,33 +119,9 @@ std::vector<GalaxyPair> Image::getGalaxyPairs() {
             pairs.push_back(GalaxyPair{galaxies[i], galaxies[j]});
         }
     }
-    
     return pairs;
 }
 
-long GalaxyPair::getSteps() {
-    long steps = 0;
-    Point current = first;
-    
-    while(current != second) {
-        if(current.x < second.x) {
-            current.x++;
-            steps++;
-        }
-        if (current.x > second.x) {
-            current.x--;
-            steps++;
-        }
-
-        if (current.y < second.y) {
-            current.y++;
-            steps++;
-        }
-        if (current.y > second.y) {
-            current.y--;
-            steps++;
-        }
-    }
-    
-    return steps;
+long GalaxyPair::getSteps() const {
+    return std::abs(first.x - second.x) + std::abs(first.y - second.y);
 }
