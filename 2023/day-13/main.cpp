@@ -10,12 +10,13 @@ enum class Found { Vertical, Horizontal, None };
 
 struct Pattern {
     std::vector<std::vector<Terrain>> terrain;
-    std::vector<std::tuple<Found, int, int>> findStartPossibleMirrors();
-    std::pair<std::tuple<Found, int, int>, std::tuple<int, int>> findStartMirror();
-    long summarize();
+    std::vector<std::tuple<Found, int, int, bool>> findStartPossibleMirrors(const std::function<bool(std::vector<Terrain>&, std::vector<Terrain>&)>& = [](std::vector<Terrain> &one, std::vector<Terrain> &two)->bool{return false;});
+    std::pair<std::tuple<Found, int, int, bool>, std::tuple<int, int>> findStartMirror(const std::function<bool(std::vector<Terrain>&, std::vector<Terrain>&)>& = [](std::vector<Terrain> &one, std::vector<Terrain> &two)->bool{return false;}, bool = false);
+    long summarize(const std::function<bool(std::vector<Terrain>&, std::vector<Terrain>&)>& = [](std::vector<Terrain> &one, std::vector<Terrain> &two)->bool{return false;}, bool = false);
 };
 
 std::vector<Pattern> getPatterns(std::ifstream &);
+bool hasSmug(std::vector<Terrain> &, std::vector<Terrain> &);
 
 void partOne(std::vector<Pattern>);
 void partTwo(std::vector<Pattern>);
@@ -38,17 +39,21 @@ void partOne(std::vector<Pattern> patterns) {
 }
 
 void partTwo(std::vector<Pattern> patterns) {
-
+    int answer = 0;
+    for (Pattern pattern : patterns) answer += pattern.summarize(hasSmug, true);
+    std::cout << "Answer for part 2: " << answer << std::endl;
 }
 
-std::vector<std::tuple<Found, int, int>> Pattern::findStartPossibleMirrors() {
-    std::vector<std::tuple<Found, int, int>> result;
+std::vector<std::tuple<Found, int, int, bool>> Pattern::findStartPossibleMirrors(const std::function<bool(std::vector<Terrain>&, std::vector<Terrain>&)>& predicate) {
+    std::vector<std::tuple<Found, int, int, bool>> result;
     
     // Horizontal check
     std::vector<Terrain> previousPattern = terrain[0];
     for(int y = 1; y < terrain.size(); y++) {
-        if (previousPattern == terrain[y]) 
-            result.emplace_back(Found::Horizontal, y-1, y);
+        
+        bool smug = predicate(previousPattern, terrain[y]);
+        if (previousPattern == terrain[y] || smug)
+            result.emplace_back(Found::Horizontal, y-1, y, smug);
         previousPattern = terrain[y];
     }
 
@@ -58,9 +63,10 @@ std::vector<std::tuple<Found, int, int>> Pattern::findStartPossibleMirrors() {
         std::vector<Terrain> tempV;
         for (int y = 0; y < terrain.size(); y++)
             tempV.push_back(terrain[y][x]);
-        
-        if (previousPattern == tempV)
-            result.emplace_back(Found::Vertical, x-1, x);
+
+        bool smug = predicate(previousPattern, tempV);
+        if (previousPattern == tempV || smug)
+            result.emplace_back(Found::Vertical, x-1, x, smug);
         previousPattern = tempV;
         tempV.clear();
     }
@@ -68,16 +74,16 @@ std::vector<std::tuple<Found, int, int>> Pattern::findStartPossibleMirrors() {
     return result;
 }
 
-std::pair<std::tuple<Found, int, int>, std::tuple<int, int>> Pattern::findStartMirror() {
-    std::vector<std::tuple<Found, int, int>> possibleMirrors = findStartPossibleMirrors();
-    std::map<std::tuple<Found, int, int>, std::tuple<int, int>> answers;
+std::pair<std::tuple<Found, int, int, bool>, std::tuple<int, int>> Pattern::findStartMirror(const std::function<bool(std::vector<Terrain>&, std::vector<Terrain>&)>& predicate, bool mug) {
+    std::vector<std::tuple<Found, int, int, bool>> possibleMirrors = findStartPossibleMirrors(predicate);
+    std::map<std::tuple<Found, int, int, bool>, std::tuple<int, int>> answers;
     
-    for(std::tuple<Found, int, int> tuple : possibleMirrors) {
+    for(std::tuple<Found, int, int, bool> tuple : possibleMirrors) {
+        bool found = true;
         switch (std::get<0>(tuple)) {
             case Found::Vertical: {
                 int left = std::get<1>(tuple)-1, right = std::get<2>(tuple)+1;
                 int min = std::min(std::get<1>(tuple), (int)terrain[0].size() - right);
-                bool found = true;
                 for(int x = 0; x < min; x++) {
                     std::vector<Terrain> tempLeft;
                     for (int y = 0; y < terrain.size(); y++)
@@ -87,7 +93,9 @@ std::pair<std::tuple<Found, int, int>, std::tuple<int, int>> Pattern::findStartM
                     for (int y = 0; y < terrain.size(); y++)
                         tempRight.push_back(terrain[y][right + x]);
                     
-                    if (tempLeft != tempRight) {
+                    bool smug = predicate(tempLeft, tempRight);
+                    if (!std::get<3>(tuple) && smug) std::get<3>(tuple) = smug;
+                    if (tempLeft != tempRight && !smug) {
                         found = false;
                         break;
                     }
@@ -99,9 +107,10 @@ std::pair<std::tuple<Found, int, int>, std::tuple<int, int>> Pattern::findStartM
             case Found::Horizontal: {
                 int up = std::get<1>(tuple)-1, down = std::get<2>(tuple)+1;
                 int min = std::min(std::get<1>(tuple), (int)terrain.size() - down);
-                bool found = true;
                 for (int y = 0; y < min; y++) {
-                    if (terrain[up - y] != terrain[down + y]) {
+                    bool smug = predicate(terrain[up - y], terrain[down + y]);
+                    if (!std::get<3>(tuple) && smug) std::get<3>(tuple) = smug;
+                    if (terrain[up - y] != terrain[down + y] && !smug) {
                         found = false;
                         break;
                     }
@@ -112,23 +121,26 @@ std::pair<std::tuple<Found, int, int>, std::tuple<int, int>> Pattern::findStartM
             case Found::None:
                 break;
         }
+        
     }
 
+    
     if (answers.empty())
-        return {std::make_tuple(Found::None, -1, -1), std::make_tuple(-1, -1)};
+        return {std::make_tuple(Found::None, -1, -1, false), std::make_tuple(-1, -1)};
 
-
+    if (mug) {
+        std::erase_if(answers, [](auto kvp)->bool{return !std::get<3>(kvp.first);});
+    }
+    
     return *std::max_element(answers.begin(),answers.end(),
-                                  [] (const auto &a, const auto &b)->bool{ 
+                                  [] (const std::pair<std::tuple<Found, int, int, bool>, std::tuple<int, int>> &a, const std::pair<std::tuple<Found, int, int, bool>, std::tuple<int, int>> &b)->bool{ 
         return (std::get<0>(a.second) - std::get<1>(a.second)) < (std::get<0>(b.second) - std::get<1>(b.second)); 
     } );
 }
 
-long Pattern::summarize() {
+long Pattern::summarize(const std::function<bool(std::vector<Terrain>&, std::vector<Terrain>&)> &predicate, bool validate) {
     long summary = 0;
-    std::pair<std::tuple<Found, int, int>, std::tuple<int, int>> found = findStartMirror();
-//    std::cout << static_cast<int>(std::get<0>(found.first)) << ": " << std::get<1>(found.first) << ", " << std::get<2>(found.first) << std::endl;
-//    std::cout << "Left: " << std::get<0>(found.second) << ", Right: " << std::get<1>(found.second) << std::endl;
+    std::pair<std::tuple<Found, int, int, bool>, std::tuple<int, int>> found = findStartMirror(predicate, validate);
 
     if (get<0>(found.first) == Found::Vertical) summary += get<0>(found.second);
     if (get<0>(found.first) == Found::Horizontal) summary += (get<0>(found.second) * 100);
@@ -156,4 +168,17 @@ std::vector<Pattern> getPatterns(std::ifstream &input) {
     if (!terrain.empty()) result.push_back(Pattern{terrain});
     
     return result;
+}
+
+bool hasSmug(std::vector<Terrain> &tV1, std::vector<Terrain> &tV2) {
+    int count = 0, index = 0;
+    for (int i = 0; i < tV1.size(); i++) {
+        if (tV1[i] != tV2[i]) {
+            count++;
+            index = i;
+        }
+        if (count > 1) return false;
+    }
+    if (count < 1) return false;
+    return true;
 }
