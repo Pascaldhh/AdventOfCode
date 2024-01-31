@@ -1,17 +1,26 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
+#include <map>
 
 enum class Rock { Rounded, Cube, Empty };
-enum class Direction { North, East, South, West };
+enum class Direction { North, West, South, East }; // Correct order for cycle
 
 struct Platform {
     std::vector<std::vector<Rock>> grid;
     void slideDirection(Direction);
     void slideCycle();
+    void slideCycleAmount(int n);
     long totalLoad();
+    std::string str();
+    static std::map<Rock, char> RockCharTable;
 };
 
+std::map<Rock, char> Platform::RockCharTable {
+    {Rock::Rounded, 'O'},
+    {Rock::Cube, '#'},
+    {Rock::Empty, '.'}
+};
 Platform getPlatform(std::ifstream &);
 
 void partOne(Platform);
@@ -21,7 +30,7 @@ int main() {
     if (!input.is_open()) return -1;
     
     Platform platform = getPlatform(input);
-    partOne(platform);
+//    partOne(platform);
     partTwo(platform);
     
     input.close();
@@ -30,17 +39,12 @@ int main() {
 
 void partOne(Platform platform) {
     platform.slideDirection(Direction::North);
-    for (int i = 0; i < platform.grid.size(); ++i) {
-        for (int j = 0; j < platform.grid[i].size(); ++j) {
-            std::cout << static_cast<int>(platform.grid[i][j]);
-        }
-        std::cout << std::endl;
-    }
     std::cout << "Answer for part 1: " << platform.totalLoad() << std::endl;
 }
 
 void partTwo(Platform platform) {
-    platform.slideCycle();
+    platform.slideCycleAmount(100000000);
+//    std::cout << platform.str() << std::endl;
     std::cout << "Answer for part 2: " << platform.totalLoad() << std::endl;
 }
 
@@ -156,8 +160,37 @@ long Platform::totalLoad() {
 }
 
 void Platform::slideCycle() {
-    for (int d = (int)Direction::North; d <= (int)Direction::West; d++)
+    for (int d = (int)Direction::North; d <= (int)Direction::East; d++)
         slideDirection((Direction)d);
+}
+
+void Platform::slideCycleAmount(int n) {
+    std::vector<std::vector<std::vector<Rock>>> list;
+    long removedNumbers = 0;
+    std::vector<std::vector<Rock>>::iterator ittr;
+    for (;;) {
+        slideCycle();
+        auto ittr = std::find(list.begin(), list.end(), grid);
+        if (ittr != list.end())
+            break;
+        
+        list.push_back(grid);
+    }
+    
+    int first_cycle_grid_index =
+    
+    int posKey = (n - );
+    grid = list[posKey];
+    std::cout << "Size vec: " << list.size() << ", removed: " << removedNumbers << ", pos key: " << posKey <<  std::endl;
+}
+
+std::string Platform::str() {
+    std::string result;
+    for (std::vector<Rock> &v : grid) {
+        for (Rock &rock : v) result += RockCharTable[rock];
+        result += "\n";
+    }
+    return result + "\n";
 }
 
 Platform getPlatform(std::ifstream &input) {
