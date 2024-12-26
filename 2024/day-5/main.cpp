@@ -1,27 +1,39 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <vector>
+#include <format>
+
+struct PageUpdate;
 
 struct PageOrderingRule {
     int before;
     int after;
 
+    bool isAvailable(PageUpdate);
     std::string str();
 
     static PageOrderingRule parse(std::string);
 };
+
 struct PageUpdate {
     std::vector<int> pageNumbers;
-    bool isValid(std::vector<PageOrderingRule>);
 
+    bool isValid(PageOrderingRule);
+    bool isValid(std::vector<PageOrderingRule>);
+    int getCenterPage();
     std::string str();
 
     static PageUpdate parse(std::string);
 };
+
 struct PrintQueue {
     std::vector<PageUpdate> updates;
     std::vector<PageOrderingRule> rules;
 
+    std::vector<PageOrderingRule> getAvailableRules(PageUpdate);
+    std::vector<PageUpdate> getSuccessfulUpdates();
+    std::vector<int> getCenterPagesOfSuccessfulUpdates();
     std::string str();
 
     static PrintQueue parse(std::ifstream &);
@@ -42,8 +54,13 @@ int main() {
 }
 
 void partOne(PrintQueue printQueue) {
-    std::cout << printQueue.str() << std::endl;
-    std::cout << "Answer part 1: " << std::endl;
+    int result = 0;
+
+    for(int num : printQueue.getCenterPagesOfSuccessfulUpdates()) {
+        result += num;
+    }
+
+    std::cout << "Answer part 1: " << result << std::endl;
 }
 
 void partTwo(PrintQueue printQueue) {
@@ -61,6 +78,81 @@ PageOrderingRule PageOrderingRule::parse(std::string line) {
     }
 
     return result;
+}
+
+bool PageOrderingRule::isAvailable(PageUpdate update) {
+    for(int i = 0; i < 2; i++) {
+        bool available = false;
+
+        for(int pageNumber : update.pageNumbers) {
+           if((i == 0 && pageNumber == before) || (i == 1 && pageNumber == after)) {
+               available = true;
+           }
+        }
+
+        if(!available) return false;
+    }
+
+    return true;
+}
+
+std::vector<PageOrderingRule> PrintQueue::getAvailableRules(PageUpdate update) {
+    std::vector<PageOrderingRule> availableRules;
+    for(PageOrderingRule rule : rules) {
+        if(rule.isAvailable(update)) availableRules.push_back(rule);
+    }
+    return availableRules;
+}
+
+bool PageUpdate::isValid(PageOrderingRule rule) {
+    bool foundBefore = false;
+
+    for(int number : pageNumbers) {
+        if(!foundBefore && rule.before == number) {
+            foundBefore = true;
+            continue;
+        }
+
+        if(foundBefore && rule.after == number) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool PageUpdate::isValid(std::vector<PageOrderingRule> rules) {
+    for(PageOrderingRule rule : rules) {
+        if(!isValid(rule)) return false;
+    }
+    return true;
+}
+
+std::vector<PageUpdate> PrintQueue::getSuccessfulUpdates() {
+    std::vector<PageUpdate> solidUpdates;
+
+    for(PageUpdate update : updates) {
+        if(update.isValid(getAvailableRules(update))) {
+            solidUpdates.push_back(update);
+        }
+    }
+
+    return solidUpdates;
+}
+
+int PageUpdate::getCenterPage() {
+    unsigned long index = pageNumbers.size() / 2;
+    return pageNumbers[index];
+}
+
+std::vector<int> PrintQueue::getCenterPagesOfSuccessfulUpdates() {
+    std::vector<int> pageNums;
+
+    for(PageUpdate update : getSuccessfulUpdates()) {
+        pageNums.push_back(update.getCenterPage());
+    }
+
+    return pageNums;
 }
 
 std::string PageOrderingRule::str() {
@@ -94,11 +186,6 @@ PageUpdate PageUpdate::parse(std::string line) {
     }
 
     return result;
-}
-
-bool PageUpdate::isValid(std::vector<PageOrderingRule> rules) {
-
-    return false;
 }
 
 PrintQueue PrintQueue::parse(std::ifstream &input) {
