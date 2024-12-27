@@ -3,6 +3,7 @@
 #include <sstream>
 #include <vector>
 #include <format>
+#include <numeric>
 
 struct PageUpdate;
 
@@ -21,6 +22,7 @@ struct PageUpdate {
 
     bool isValid(PageOrderingRule);
     bool isValid(std::vector<PageOrderingRule>);
+    void sort(std::vector<PageOrderingRule>);
     int getCenterPage();
     std::string str();
 
@@ -32,8 +34,8 @@ struct PrintQueue {
     std::vector<PageOrderingRule> rules;
 
     std::vector<PageOrderingRule> getAvailableRules(PageUpdate);
-    std::vector<PageUpdate> getSuccessfulUpdates();
-    std::vector<int> getCenterPagesOfSuccessfulUpdates();
+    std::vector<PageUpdate> getSuccessfulUpdates(bool (*f)(PageUpdate, std::vector<PageOrderingRule>));
+    std::vector<int> getCenterPages(std::vector<PageUpdate>);
     std::string str();
 
     static PrintQueue parse(std::ifstream &);
@@ -54,16 +56,22 @@ int main() {
 }
 
 void partOne(PrintQueue printQueue) {
-    int result = 0;
+    auto pred = [](PageUpdate update, std::vector<PageOrderingRule> rules) { return update.isValid(rules); };
+    std::vector<PageUpdate> successUpdates = printQueue.getSuccessfulUpdates(pred);
+    std::vector<int> centerNumbers = printQueue.getCenterPages(successUpdates);
 
-    for(int num : printQueue.getCenterPagesOfSuccessfulUpdates()) {
-        result += num;
-    }
-
-    std::cout << "Answer part 1: " << result << std::endl;
+    std::cout << "Answer part 1: " << std::reduce(centerNumbers.begin(), centerNumbers.end()) << std::endl;
 }
 
 void partTwo(PrintQueue printQueue) {
+    auto pred = [](PageUpdate update, std::vector<PageOrderingRule> rules) { return !update.isValid(rules); };
+    std::vector<PageUpdate> successUpdates = printQueue.getSuccessfulUpdates(pred);
+    for (PageUpdate update : successUpdates) {
+        std::sort(update.pageNumbers.begin(), update.pageNumbers.end());
+        std::cout << update.str() << std::endl;
+    }
+    // std::vector<int> centerNumbers = printQueue.getCenterPages(successUpdates);
+
     std::cout << "Answer part 2: " << printQueue.updates.size() << std::endl;
 }
 
@@ -128,11 +136,11 @@ bool PageUpdate::isValid(std::vector<PageOrderingRule> rules) {
     return true;
 }
 
-std::vector<PageUpdate> PrintQueue::getSuccessfulUpdates() {
+std::vector<PageUpdate> PrintQueue::getSuccessfulUpdates(bool (*f)(PageUpdate, std::vector<PageOrderingRule>)) {
     std::vector<PageUpdate> solidUpdates;
 
     for(PageUpdate update : updates) {
-        if(update.isValid(getAvailableRules(update))) {
+        if(f(update, getAvailableRules(update))) {
             solidUpdates.push_back(update);
         }
     }
@@ -140,15 +148,20 @@ std::vector<PageUpdate> PrintQueue::getSuccessfulUpdates() {
     return solidUpdates;
 }
 
+void PageUpdate::sort(std::vector<PageOrderingRule> rules) {
+    
+}
+
+
 int PageUpdate::getCenterPage() {
     unsigned long index = pageNumbers.size() / 2;
     return pageNumbers[index];
 }
 
-std::vector<int> PrintQueue::getCenterPagesOfSuccessfulUpdates() {
+std::vector<int> PrintQueue::getCenterPages(std::vector<PageUpdate> updates) {
     std::vector<int> pageNums;
 
-    for(PageUpdate update : getSuccessfulUpdates()) {
+    for(PageUpdate update : updates) {
         pageNums.push_back(update.getCenterPage());
     }
 
