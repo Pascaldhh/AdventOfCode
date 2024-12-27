@@ -23,6 +23,7 @@ struct PageUpdate {
     bool isValid(PageOrderingRule);
     bool isValid(std::vector<PageOrderingRule>);
     void sort(std::vector<PageOrderingRule>);
+    void sort(PageOrderingRule);
     int getCenterPage();
     std::string str();
 
@@ -66,13 +67,10 @@ void partOne(PrintQueue printQueue) {
 void partTwo(PrintQueue printQueue) {
     auto pred = [](PageUpdate update, std::vector<PageOrderingRule> rules) { return !update.isValid(rules); };
     std::vector<PageUpdate> successUpdates = printQueue.getSuccessfulUpdates(pred);
-    for (PageUpdate update : successUpdates) {
-        std::sort(update.pageNumbers.begin(), update.pageNumbers.end());
-        std::cout << update.str() << std::endl;
-    }
-    // std::vector<int> centerNumbers = printQueue.getCenterPages(successUpdates);
+    for(PageUpdate &pageUpdate : successUpdates) pageUpdate.sort(printQueue.getAvailableRules(pageUpdate));
+    std::vector<int> centerNumbers = printQueue.getCenterPages(successUpdates);
 
-    std::cout << "Answer part 2: " << printQueue.updates.size() << std::endl;
+    std::cout << "Answer part 2: " << std::reduce(centerNumbers.begin(), centerNumbers.end()) << std::endl;
 }
 
 PageOrderingRule PageOrderingRule::parse(std::string line) {
@@ -149,7 +147,40 @@ std::vector<PageUpdate> PrintQueue::getSuccessfulUpdates(bool (*f)(PageUpdate, s
 }
 
 void PageUpdate::sort(std::vector<PageOrderingRule> rules) {
-    
+    for(auto rule : rules) {
+        if(isValid(rule)) continue;
+
+
+        sort(rule);
+        sort(rules);
+    }
+}
+
+void PageUpdate::sort(PageOrderingRule rule) {
+    enum class SearchState {
+        After,
+        Before,
+        Finished
+    };
+
+    SearchState current = SearchState::After;
+
+    for(int &p : pageNumbers) {
+        switch (current) {
+            case SearchState::After:
+                if(p != rule.after) continue;
+                p = rule.before;
+                current = SearchState::Before;
+                break;
+            case SearchState::Before:
+                if(p != rule.before) continue;
+                p = rule.after;
+                current = SearchState::Finished;
+                break;
+            case SearchState::Finished:
+                return;
+        }
+    }
 }
 
 
