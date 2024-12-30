@@ -1,42 +1,55 @@
+#include <algorithm>
 #include <format>
 #include <fstream>
 #include <iostream>
 #include <memory>
 #include <vector>
 
+enum class Order {
+    First,
+    Last
+};
+
 struct Space {
     int amount;
 
-    virtual std::string str();
+    Space(const int amount) : amount(amount) {}
+    bool isEmpty() const;
 
-    Space(int amount) : amount(amount) {}
+    virtual std::string str();
     virtual ~Space() = default;
 };
 
 struct EmptySpace : public Space {
-    EmptySpace(int amount) : Space(amount) {}
+    EmptySpace(const int amount) : Space(amount) {}
     std::string str() override;
 };
 
 struct TakenSpace : public Space {
     int id;
 
-    TakenSpace(int amount, int id) : Space(amount), id(id) {}
+    TakenSpace(const int amount, const int id) : Space(amount), id(id) {}
     std::string str() override;
 };
 
 struct Disk {
     std::vector<std::unique_ptr<Space>> format;
 
+    template <class T = Space>
+    T* get(Order);
+    int getIndex(Space*);
+    TakenSpace createTakenSpace(EmptySpace*, TakenSpace*);
+    long long calculateChecksum();
     std::string str();
 
-    std::tuple<EmptySpace*, int> getFirstEmptySpace();
-    std::tuple<TakenSpace*, int> getLastTakenSpace();
-
-    void insertSpace(int, const std::unique_ptr<Space> &);
-    void compact();
+    void remove(Space*);
+    void reFormat();
+    void reFormatWholeFiles();
 
     static Disk parse(std::ifstream &);
+    static bool isTakenSpace(int);
+    static std::vector<std::unique_ptr<Space>> generateEmptyOrTakenSpaceWithId(const std::string &);
+    static std::unique_ptr<Space> createEmptyOrTakenSpaceOnIndex(int, int, int);
 };
 
 void partOne(Disk &);
@@ -46,48 +59,127 @@ int main() {
     if (!input.is_open()) return -1;
 
     Disk disk = Disk::parse(input);
+    Disk disk2 = Disk::parse(input);
     input.close();
 
     partOne(disk);
-    partTwo(disk);
+    partTwo(disk2);
 
     return 0;
 }
 
 void partOne(Disk &disk) {
-    disk.compact();
-    std::cout << disk.str() << std::endl;
+    disk.reFormat();
+    std::cout << "Answer part 1: " << disk.calculateChecksum() << std::endl;
 }
 
 void partTwo(Disk &disk) {
+    std::cout << disk.str() << std::endl;
+    disk.reFormatWholeFiles();
+    std::cout << disk.str() << std::endl;
 
+    std::cout << "Answer part 2: " << disk.calculateChecksum() << std::endl;
 }
 
+void Disk::reFormat() {
+    auto* emptySpace = get<EmptySpace>(Order::First);
+    auto* takenSpace = get<TakenSpace>(Order::Last);
 
-
-void Disk::compact() {
-    std::tuple<EmptySpace*, int> emptyTuple = getFirstEmptySpace();
-    std::tuple<TakenSpace*, int> takenTuple = getLastTakenSpace();
-
-    while (std::get<1>(emptyTuple) > std::get<1>(takenTuple)) {
-        EmptySpace* emptySpace = std::get<0>(emptyTuple);
-        TakenSpace* takenSpace = std::get<0>(takenTuple);
-        while (emptySpace->amount > 0) {
-            if (0 > takenSpace->amount) {
-                takenTuple = getLastTakenSpace();
+    while (getIndex(emptySpace) < getIndex(takenSpace)) {
+        while (!emptySpace->isEmpty()) {
+            int indexOfPlacement = getIndex(emptySpace);
+            format.insert(format.begin() + indexOfPlacement, std::make_unique<TakenSpace>(createTakenSpace(emptySpace, takenSpace)));
+            if (takenSpace->isEmpty()) {
+                remove(takenSpace);
+                takenSpace = get<TakenSpace>(Order::Last);
             }
-
-            takenSpace->amount--;
-            emptySpace->amount--;
-
         }
-
-        emptyTuple = getFirstEmptySpace();
+        remove(emptySpace);
+        emptySpace = get<EmptySpace>(Order::First);
     }
 }
 
-void Disk::insertSpace(int index, const std::unique_ptr<Space> &space) {
-    format.insert(format.begin() + index, space);
+void Disk::reFormatWholeFiles() {
+    for (int i = format.size()-1; i >= 0; i--) {
+        auto* takenSpace = dynamic_cast<TakenSpace*>(format[i].get());
+        if (!takenSpace) continue;
+
+        for (int j = 0; j < format.size(); j++) {
+            if (takenSpace->isEmpty()) break;
+            auto *emptySpace = dynamic_cast<EmptySpace*>(format[j].get());
+            if (!emptySpace || emptySpace->amount < takenSpace->amount) continue;
+            int indexOfPlacement = getIndex(emptySpace);
+            format.insert(format.begin() + indexOfPlacement, std::make_unique<TakenSpace>(createTakenSpace(emptySpace, takenSpace)));
+
+            if (emptySpace->isEmpty()) remove(emptySpace);
+        }
+        if (takenSpace->isEmpty()) remove(takenSpace);
+    }
+}
+
+template<class T>
+T* Disk::get(const Order order) {
+    T* spacePtr = nullptr;
+
+    for (auto &space : format) {
+        if (auto *type = dynamic_cast<T*>(space.get())) {
+            if (order == Order::First) {
+                return type;
+            }
+            spacePtr = type;
+        }
+    }
+
+    return spacePtr;
+}
+
+int Disk::getIndex(Space *space) {
+    const auto it = std::find_if(format.begin(), format.end(), [space](const std::unique_ptr<Space> &item) {
+        return item.get() == space;
+    });
+
+    return it - format.begin();
+}
+
+TakenSpace Disk::createTakenSpace(EmptySpace *emptySpace, TakenSpace *takenSpace) {
+    TakenSpace newTakenSpace(0, takenSpace->id);
+
+    const int amountOfLoops = std::min(emptySpace->amount, takenSpace->amount );
+    for (int i = 0; i < amountOfLoops; i++) {
+        newTakenSpace.amount++;
+        emptySpace->amount--;
+        takenSpace->amount--;
+    }
+    return newTakenSpace;
+}
+
+long long Disk::calculateChecksum() {
+    long long checksum = 0, position = 0;
+    for (std::unique_ptr<Space> &space : format) {
+        auto* takenSpace = dynamic_cast<TakenSpace*>(space.get());
+        if (!takenSpace) continue;
+
+        for (int i = 0; i < space->amount; i++) {
+            checksum += position * takenSpace->id;
+            position++;
+        }
+    }
+
+    return checksum;
+}
+
+bool Space::isEmpty() const {
+    return amount <= 0;
+}
+
+void Disk::remove(Space *space) {
+    int index = getIndex(space);
+
+    if (0 > index || index > format.size()-1) {
+        return;
+    }
+
+    format.erase(format.begin() + index);
 }
 
 std::string Disk::str() {
@@ -99,30 +191,10 @@ std::string Disk::str() {
     return result;
 }
 
-std::tuple<EmptySpace*, int> Disk::getFirstEmptySpace() {
-    for (int i = 0; i < format.size(); i++) {
-        if (EmptySpace* emptySpace = dynamic_cast<EmptySpace*>(format[i].get())) {
-            return std::make_tuple(emptySpace, i);
-        }
-    }
-
-    return std::make_tuple(nullptr, -1);
-}
-
-std::tuple<TakenSpace*, int> Disk::getLastTakenSpace() {
-    for (int i = format.size()-1; i >= 0; i--) {
-        if (TakenSpace* takenSpace = dynamic_cast<TakenSpace*>(format[i].get())) {
-            return std::make_tuple(takenSpace, i);
-        }
-    }
-
-    return std::make_tuple(nullptr, -1);
-}
-
-
 std::string Space::str() {
     return std::format("Space[amount:{}]", amount);
 }
+
 
 std::string EmptySpace::str() {
     return std::format("EmptySpace[amount:{}]", amount);
@@ -135,20 +207,45 @@ std::string TakenSpace::str() {
 Disk Disk::parse(std::ifstream &input) {
     Disk disk;
 
-    std::string line;
+    std::string line, wholeFileAsLine;
     while (std::getline(input, line)) {
-        int id = 0;
-        for (int i = 0; i < line.size(); i++) {
-            const char c = line[i];
-            if (i % 2 == 0) {
-                disk.format.push_back(std::make_unique<TakenSpace>(TakenSpace(c - '0', id)));
-                id++;
-                continue;
-            }
-
-            disk.format.push_back(std::make_unique<EmptySpace>(EmptySpace(c - '0')));
-        }
+        wholeFileAsLine += line;
     }
 
+    disk.format = generateEmptyOrTakenSpaceWithId(wholeFileAsLine);
+
+    input.clear();
+    input.seekg(std::ios::beg);
+
     return disk;
+}
+
+std::vector<std::unique_ptr<Space>> Disk::generateEmptyOrTakenSpaceWithId(const std::string &line) {
+    std::vector<std::unique_ptr<Space>> result;
+
+    long id = 0;
+    for (int i = 0; i < line.size(); i++) {
+        const int amount = line[i] - '0';
+        result.push_back(createEmptyOrTakenSpaceOnIndex(i, amount, id));
+
+        if (!isTakenSpace(i)) {
+            continue;
+        }
+
+        id++;
+    }
+
+    return result;
+}
+
+std::unique_ptr<Space> Disk::createEmptyOrTakenSpaceOnIndex(const int index, const int amount, const int id) {
+    if (isTakenSpace(index)) {
+        return std::make_unique<TakenSpace>(TakenSpace(amount, id));
+    }
+
+    return std::make_unique<EmptySpace>(EmptySpace(amount));
+}
+
+bool Disk::isTakenSpace(const int index) {
+    return index % 2 == 0;
 }
