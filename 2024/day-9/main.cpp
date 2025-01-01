@@ -4,6 +4,7 @@
 #include <iostream>
 #include <memory>
 #include <vector>
+#include <set>
 
 enum class Order {
     First,
@@ -38,7 +39,7 @@ struct Disk {
     template <class T = Space>
     T* get(Order);
     int getIndex(Space*);
-    TakenSpace createTakenSpace(EmptySpace*, TakenSpace*);
+    std::tuple<TakenSpace, EmptySpace> createTakenSpace(EmptySpace*, TakenSpace*);
     long long calculateChecksum();
     std::string str();
 
@@ -74,9 +75,7 @@ void partOne(Disk &disk) {
 }
 
 void partTwo(Disk &disk) {
-    std::cout << disk.str() << std::endl;
     disk.reFormatWholeFiles();
-    std::cout << disk.str() << std::endl;
 
     std::cout << "Answer part 2: " << disk.calculateChecksum() << std::endl;
 }
@@ -87,8 +86,9 @@ void Disk::reFormat() {
 
     while (getIndex(emptySpace) < getIndex(takenSpace)) {
         while (!emptySpace->isEmpty()) {
-            int indexOfPlacement = getIndex(emptySpace);
-            format.insert(format.begin() + indexOfPlacement, std::make_unique<TakenSpace>(createTakenSpace(emptySpace, takenSpace)));
+            const int indexOfPlacement = getIndex(emptySpace);
+            auto newSpaces = createTakenSpace(emptySpace, takenSpace);
+            format.insert(format.begin() + indexOfPlacement, std::make_unique<TakenSpace>(std::get<0>(newSpaces)));
             if (takenSpace->isEmpty()) {
                 remove(takenSpace);
                 takenSpace = get<TakenSpace>(Order::Last);
@@ -100,16 +100,23 @@ void Disk::reFormat() {
 }
 
 void Disk::reFormatWholeFiles() {
+    std::set<int> alreadyPlaced;
     for (int i = format.size()-1; i >= 0; i--) {
         auto* takenSpace = dynamic_cast<TakenSpace*>(format[i].get());
         if (!takenSpace) continue;
 
+        if (alreadyPlaced.contains(takenSpace->id)) continue;;
+        alreadyPlaced.insert(takenSpace->id);
+
         for (int j = 0; j < format.size(); j++) {
-            if (takenSpace->isEmpty()) break;
+            if (takenSpace->isEmpty() || i < j) break;
             auto *emptySpace = dynamic_cast<EmptySpace*>(format[j].get());
             if (!emptySpace || emptySpace->amount < takenSpace->amount) continue;
             int indexOfPlacement = getIndex(emptySpace);
-            format.insert(format.begin() + indexOfPlacement, std::make_unique<TakenSpace>(createTakenSpace(emptySpace, takenSpace)));
+
+            auto newSpaces = createTakenSpace(emptySpace, takenSpace);
+            format.insert(format.begin() + indexOfPlacement, std::make_unique<TakenSpace>(std::get<0>(newSpaces)));
+            format.insert(format.begin() + getIndex(takenSpace), std::make_unique<EmptySpace>(std::get<1>(newSpaces)));
 
             if (emptySpace->isEmpty()) remove(emptySpace);
         }
@@ -141,21 +148,31 @@ int Disk::getIndex(Space *space) {
     return it - format.begin();
 }
 
-TakenSpace Disk::createTakenSpace(EmptySpace *emptySpace, TakenSpace *takenSpace) {
-    TakenSpace newTakenSpace(0, takenSpace->id);
+std::tuple<TakenSpace, EmptySpace> Disk::createTakenSpace(EmptySpace *emptySpace, TakenSpace *takenSpace) {
+    std::tuple<TakenSpace, EmptySpace> tuple = std::make_tuple(TakenSpace(0, takenSpace->id), EmptySpace(0));
+    TakenSpace &newTakenSpace = std::get<0>(tuple);
+    EmptySpace &newEmptySpace = std::get<1>(tuple);
 
     const int amountOfLoops = std::min(emptySpace->amount, takenSpace->amount );
     for (int i = 0; i < amountOfLoops; i++) {
         newTakenSpace.amount++;
+        newEmptySpace.amount++;
         emptySpace->amount--;
         takenSpace->amount--;
     }
-    return newTakenSpace;
+    return tuple;
 }
 
 long long Disk::calculateChecksum() {
     long long checksum = 0, position = 0;
     for (std::unique_ptr<Space> &space : format) {
+        auto* emptySpace = dynamic_cast<EmptySpace*>(space.get());
+        if (emptySpace) {
+            for (int i = 0; i < emptySpace->amount; i++) {
+                position++;
+            }
+        }
+
         auto* takenSpace = dynamic_cast<TakenSpace*>(space.get());
         if (!takenSpace) continue;
 
