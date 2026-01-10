@@ -5,21 +5,8 @@
 #include <algorithm>
 #include <iterator>
 
-enum class Object {
-    None,
-    RollOfPaper
-};
-
-enum class Move {
-    Up,
-    UpRight,
-    Right,
-    DownRight,
-    Down,
-    DownLeft,
-    Left,
-    UpLeft
-};
+enum class Object { None, RollOfPaper };
+enum class Move { Up, UpRight, Right, DownRight, Down, DownLeft, Left, UpLeft };
 
 struct Axes {
     int x, y;
@@ -170,7 +157,6 @@ void Diagram::print() {
     }
 }
 
-
 Diagram Diagram::get(std::ifstream &input) {
     Diagram result;
 
@@ -183,5 +169,3 @@ Diagram Diagram::get(std::ifstream &input) {
 
     return result;
 }
-
-
